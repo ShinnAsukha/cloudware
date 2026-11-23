@@ -132,79 +132,64 @@ func run(mode, root string) error {
 	if err := json.Unmarshal(data, &releases); err != nil {
 		return err
 	}
-	var latest string
-	// gh returns most recently published releases first. Never select a prerelease or draft.
-	for _, rel := range releases {
-		if !rel.IsDraft && !rel.IsPrerelease && tagRx.MatchString(rel.TagName) {
-			latest = rel.TagName
-			break
-		}
-	}
-	if latest == "" {
-		fmt.Println("[OK] GitHub baglantisi aktif. Cloudware icin henuz onayli uygulama surumu yayinlanmadi.")
-		return nil
-	}
 	curr, err := readInstalled(root)
-	if err != nil {
-		return err
-	}
-	if curr.Tag != "" && compareTags(latest, curr.Tag) <= 0 {
-		fmt.Println("[OK] Cloudware guncel:", latest)
+	if err != nil { return err }
+	pending, err := pendingTags(releases, curr.Tag)
+	if err != nil { return err }
+	if len(pending) == 0 {
+		fmt.Println("[OK] GitHub baglantisi aktif. Yeni onayli Cloudware uygulama surumu yok.")
 		return nil
 	}
-	fmt.Printf("[NEW] %s  (kurulu: %s)\n", latest, showTag(curr.Tag))
+	latest := pending[len(pending)-1]
+	fmt.Printf("[NEW] %d bekleyen surum, hedef %s (kurulu: %s)\n", len(pending), latest, showTag(curr.Tag))
+	for _, tag := range pending {
+		fmt.Printf("  - %s\n", tag)
+	}
 	if mode == "check" {
-		fmt.Println("Kurulum icin Update Center'i acip 'download' ve 'install' secin. Otomatik kurulum YOK.")
+		fmt.Println("Bu program kendiliginden kurulum yapmaz. Indirme, dogrulama ve kurulum icin ayri onay gerekir.")
 		return nil
 	}
 	if _, err := os.Stat(root); err != nil {
 		return fmt.Errorf("Cloudware proje klasoru yok: %s", root)
 	}
-	stage, err := stageDir(latest)
-	if err != nil {
-		return err
+	var verified []pkg
+	var combinedBytes int64
+	for _, tag := range pending {
+		stage, err := stageDir(tag)
+		if err != nil { return err }
+		// A release's staging directory is isolated by its strictly validated tag.
+		if err := os.RemoveAll(stage); err != nil { return err }
+		if err := os.MkdirAll(stage, 0700); err != nil { return err }
+		archive := filepath.Join(stage, packageName)
+		if _, err := command("gh", "release", "download", tag, "--repo", repo, "--pattern", packageName, "--dir", stage); err != nil {
+			return fmt.Errorf("surum %s indirilemedi: %w", tag, err)
+		}
+		if _, err := command("gh", "attestation", "verify", archive, "--repo", repo, "--signer-workflow", trustedWorkflow); err != nil {
+			return fmt.Errorf("surum %s imza/kaynak dogrulamasi basarisiz; kurulum ENGELLENDI: %w", tag, err)
+		}
+		pack, err := loadPackage(archive, tag)
+		if err != nil { return fmt.Errorf("surum %s manifest hatasi: %w", tag, err) }
+		for _, data := range pack.Data {
+			combinedBytes += int64(len(data))
+			if combinedBytes > 128<<20 { return errors.New("toplam guncelleme boyutu guvenli siniri asti") }
+		}
+		verified = append(verified, pack)
+		fmt.Printf("[PASS] %s imzasi ve SHA256 dosyalari dogrulandi.\n", tag)
 	}
-	if err := os.MkdirAll(stage, 0700); err != nil {
-		return err
-	}
-	archive := filepath.Join(stage, packageName)
-	// Downloads in a dedicated empty directory, never in the repository or app root.
-	if err := os.RemoveAll(stage); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(stage, 0700); err != nil {
-		return err
-	}
-	if _, err := command("gh", "release", "download", latest, "--repo", repo, "--pattern", packageName, "--dir", stage); err != nil {
-		return fmt.Errorf("indirme basarisiz: %w", err)
-	}
-	// Release asset MUST have provenance from the particular allowed workflow.
-	if _, err := command("gh", "attestation", "verify", archive, "--repo", repo, "--signer-workflow", trustedWorkflow); err != nil {
-		return fmt.Errorf("paket kaynagi/imzasi dogrulanamadi (kurulum ENGELLENDI): %w", err)
-	}
-	pack, err := loadPackage(archive, latest)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("[PASS] Imza, manifest ve %d dosya dogrulandi.\n", len(pack.Manifest.Files))
-	if err := preflight(root, pack); err != nil {
-		return fmt.Errorf("kaynak uyumu: %w", err)
-	}
-	fmt.Println("[PASS] Canli kaynak SHA256 kontrolleri.")
+	pack, err := combinePackages(verified)
+	if err != nil { return fmt.Errorf("surum zinciri dogrulanamadi: %w", err) }
+	if err := preflight(root, pack); err != nil { return fmt.Errorf("mevcut kaynak uyumsuz: %w", err) }
+	fmt.Printf("[PASS] %d surum zinciri ve %d degisecek dosya dogrulandi.\n", len(pending), len(pack.Manifest.Files))
 	if mode == "download" {
-		fmt.Println("[READY] Paket sadece kontrol edildi. Hicbir uygulama dosyasi degistirilmedi.")
+		fmt.Println("[READY] Toplu paket indirildi ve dogrulandi; Cloudware kaynaklari degismedi.")
 		return nil
 	}
-	fmt.Printf("\nBu surum %d dosyayi degistirecek, servisler: %s\n", len(pack.Manifest.Files), strings.Join(pack.Manifest.Services, ","))
+	fmt.Printf("\n%s hedefine %d dosya kurulacak. Servisler: %s\n", latest, len(pack.Manifest.Files), strings.Join(pack.Manifest.Services, ","))
 	fmt.Printf("Devam etmek icin tam olarak KUR %s yazin: ", latest)
 	answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
-	if strings.TrimSpace(answer) != "KUR "+latest {
-		return errors.New("kullanici onayi verilmedi; islem iptal")
-	}
-	if err := apply(root, pack); err != nil {
-		return err
-	}
-	fmt.Println("[PASS] Kaynaklar guncellendi, Docker servisleri kontrol edildi, surum kaydedildi.")
+	if strings.TrimSpace(answer) != "KUR "+latest { return errors.New("kullanici onayi yok; kurulum iptal") }
+	if err := apply(root, pack); err != nil { return err }
+	fmt.Println("[PASS] Toplu guncelleme tamamlandi; kaynaklar, servisler ve son surum kaydi dogrulandi.")
 	return nil
 }
 
