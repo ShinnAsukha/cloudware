@@ -27,6 +27,8 @@ jobs:
           go-version-file: update-center/go.mod
       - name: Go tests twice
         run: go test -count=2 -race ./...
+      - name: Browser UI JavaScript syntax (Linux)
+        run: node --check cmd/cloudware-updater/ui.js
       - name: Go vet
         run: go vet ./...
       - name: Build Windows EXE
@@ -56,6 +58,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & ../CLOUDWARE-UPDATE-CENTER.exe help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Browser UI JavaScript syntax (Windows)
+        shell: pwsh
+        run: node --check update-center/cmd/cloudware-updater/ui.js
       - name: Windows PowerShell 5.1 syntax parse
         shell: powershell
         run: |
