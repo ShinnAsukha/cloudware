@@ -16,7 +16,7 @@
 
 - GitHub CLI (`gh`) installed, signed in with `gh auth login` **on this Windows user account**, and authorized to access private `ShinnAsukha/cloudware`.
 - A real `E:\Cloudware` folder with a Compose file and running Docker Desktop *when applying updates*.
-- Private repo and availability of GitHub artifact attestations. If verification is unsupported or fails, installation is deliberately blocked.
+- Private repo and availability of GitHub artifact attestations (requires an eligible GitHub Enterprise Cloud plan for private repositories). If verification is unsupported or fails, installation is deliberately blocked.
 - No production release is published yet; an existing demo README is not the Cloudware application source. `check` will report `no approved application release` until an actual release candidate is integrated, tested, approved and published.
 
 ## First-time setup
@@ -35,3 +35,9 @@ The repo currently contains just its README, not the live Cloudware API/Web/DB s
 - Updater's GitHub CLI credentials are managed by GitHub CLI, not copied into this package. Never publish private repo contents or use unauthenticated public downloads.
 - Automatic check does not mean automatic installation. Database migrations and public traffic cutover are not supported in this stage.
 - Before any real deployment, rehearse backup + rollback on a representative system and confirm APIs, UI, DNS, CDN, mail and security separately. Current outstanding Phase 4B/5A release-blocking findings remain open.
+
+## One-time source import to GitHub
+
+After setup, double-click `GITHUB-AKTAR.bat` from this extracted bootstrap package. It uses your existing local `gh` and `git` login, requires explicit `YUKLE` confirmation and pushes **only updater files** to `feature/github-update-center-v1`, opening a draft PR for code review. No Cloudware application source or credentials are copied. GitHub Actions become active after the PR is merged into main and passes review.
+
+**Private repository plan restriction:** GitHub artifact attestations in private repositories require eligible GitHub Enterprise Cloud plans. On unsupported plans, publishing/verification fails closed. This is deliberate; until a supported, separately reviewed signing process exists, do not publish a real application update. GitHub connection and check-only bootstrap can still work. Environment required-reviewer protection for private repos also varies by account plan; do not assume it is configured.
