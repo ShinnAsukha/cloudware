@@ -1,0 +1,76 @@
+name: Cloudware Update Center CI
+on:
+  push:
+    paths:
+      - 'update-center/**'
+      - 'release-tools/**'
+      - '.github/workflows/cloudware-update-center-ci.yml'
+      - '.github/workflows/cloudware-release.yml'
+  pull_request:
+    paths:
+      - 'update-center/**'
+      - 'release-tools/**'
+      - '.github/workflows/cloudware-update-center-ci.yml'
+      - '.github/workflows/cloudware-release.yml'
+permissions:
+  contents: read
+jobs:
+  updater-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: update-center
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: update-center/go.mod
+      - name: Go tests twice
+        run: go test -count=2 -race ./...
+      - name: Go vet
+        run: go vet ./...
+      - name: Build Windows EXE
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go build -trimpath -o ../CLOUDWARE-UPDATE-CENTER.exe ./cmd/cloudware-updater
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cloudware-update-center-windows-preview
+          path: CLOUDWARE-UPDATE-CENTER.exe
+  windows-validation:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: update-center/go.mod
+      - name: Native Windows updater tests
+        shell: pwsh
+        working-directory: update-center
+        run: |
+          go test -count=2 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go build -o ../CLOUDWARE-UPDATE-CENTER.exe ./cmd/cloudware-updater
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ../CLOUDWARE-UPDATE-CENTER.exe help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows PowerShell 5.1 syntax parse
+        shell: powershell
+        run: |
+          $t = $null; $e = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('INSTALL.ps1',[ref]$t,[ref]$e) | Out-Null
+          if ($e.Count -ne 0) { $e | Out-String | Write-Error; exit 1 }
+  release-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Candidate negative tests twice
+        run: |
+          cd release-tools
+          python -m unittest -v test_build_package
+          python -m unittest -v test_build_package
