@@ -1,0 +1,60 @@
+name: Publish Approved Cloudware Application Update
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Exact existing release candidate tag: cw-app-X.Y.Z'
+        required: true
+        type: string
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+concurrency:
+  group: cloudware-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    # Never release a candidate from an arbitrary feature branch.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: cloudware-production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require valid tag and clean candidate
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^cw-app-[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid tag'; exit 1; }
+          test -f "release-candidates/$RELEASE_TAG/manifest.json"
+      - name: Run candidate validator twice
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s release-tools -p 'test_*.py'
+          python -m unittest discover -s release-tools -p 'test_*.py'
+          mkdir -p dist
+          python release-tools/build_package.py --tag "$RELEASE_TAG" --candidate "release-candidates/$RELEASE_TAG" --output dist/cloudware-update.zip
+      - name: Build provenance attestation (mandatory)
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/cloudware-update.zip
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists: refusing overwrite'; exit 1
+          fi
+          gh release create "$RELEASE_TAG" dist/cloudware-update.zip \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Cloudware $RELEASE_TAG" \
+            --notes "Onayli, SHA256 kontrollu, database_changes=false dosya guncellemesi. Windows Update Center kullanin."
