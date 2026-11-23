@@ -36,8 +36,12 @@ The repo currently contains just its README, not the live Cloudware API/Web/DB s
 - Automatic check does not mean automatic installation. Database migrations and public traffic cutover are not supported in this stage.
 - Before any real deployment, rehearse backup + rollback on a representative system and confirm APIs, UI, DNS, CDN, mail and security separately. Current outstanding Phase 4B/5A release-blocking findings remain open.
 
-## One-time source import to GitHub
+## Repository status
 
-After setup, double-click `GITHUB-AKTAR.bat` from this extracted bootstrap package. It uses your existing local `gh` and `git` login, requires explicit `YUKLE` confirmation and pushes **only updater files** to `feature/github-update-center-v1`, opening a draft PR for code review. No Cloudware application source or credentials are copied. GitHub Actions become active after the PR is merged into main and passes review.
+The source and test workflows have already been uploaded directly to the **private** GitHub development branch `feature/github-update-center-v1`. You do **not** need to upload these code files or run any GitHub import scripts. Review and merge the draft PR only after GitHub Actions (especially native Windows validation) succeed.
 
-**Private repository plan restriction:** GitHub artifact attestations in private repositories require eligible GitHub Enterprise Cloud plans. On unsupported plans, publishing/verification fails closed. This is deliberate; until a supported, separately reviewed signing process exists, do not publish a real application update. GitHub connection and check-only bootstrap can still work. Environment required-reviewer protection for private repos also varies by account plan; do not assume it is configured.
+The live Cloudware source code still exists only on your Windows PC and is **not** in this repository. The updater must not publish real Cloudware application releases before that source is imported and tested.
+
+## Plan-dependent release signing
+
+GitHub artifact attestations in **private** repositories require GitHub Enterprise Cloud eligibility. Ineligible accounts will be able to check GitHub releases, but any attempt to download/install an attestation-protected release will fail closed. An alternative signing workflow, with pinned verification keys, must be developed and separately reviewed before any production application release on an ineligible plan. The provided bootstrap must not be treated as a fully operational app-upgrade service in this case.
