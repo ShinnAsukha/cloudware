@@ -1,0 +1,20 @@
+# Cloudware: never commit local secrets or generated assets
+.env
+.env.*
+**/.env
+**/.env.*
+**/secrets/
+**/*.pem
+**/*.pfx
+**/*.key
+**/node_modules/
+**/.next/
+**/__pycache__/
+**/*.pyc
+**/dist/
+**/build/
+**/backups/
+*.log
+*.sqlite
+*.db
+CLOUDWARE-UPDATE-CENTER.exe
