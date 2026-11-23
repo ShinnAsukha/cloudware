@@ -62,7 +62,7 @@ type backupLedger struct {
 
 func main() {
 	fmt.Println("Cloudware Update Center | GitHub Private | Onayli Kurulum")
-	mode := "check"
+	mode := "ui"
 	if len(os.Args) > 1 {
 		mode = strings.ToLower(os.Args[1])
 	}
@@ -82,8 +82,10 @@ func main() {
 
 func run(mode, root string) error {
 	switch mode {
+	case "ui":
+		return startUI(root)
 	case "help":
-		fmt.Println("Komutlar: check | download | install | status | help")
+		fmt.Println("Komutlar: ui | check | download | install | status | help")
 		fmt.Println("Varsayilan ana klasor:", defaultRoot)
 		return nil
 	case "status":
