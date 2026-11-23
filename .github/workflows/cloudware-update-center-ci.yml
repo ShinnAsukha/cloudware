@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'update-center/**'
+      - 'modules/notifications/**'
       - 'release-tools/**'
       - '.github/workflows/cloudware-update-center-ci.yml'
       - '.github/workflows/cloudware-release.yml'
@@ -79,3 +80,32 @@ jobs:
           cd release-tools
           python -m unittest -v test_build_package
           python -m unittest -v test_build_package
+  notifications-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/notifications
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: modules/notifications/go.mod
+      - name: L5.6 notification safety tests twice with race detection
+        run: go test -race -count=2 ./...
+      - name: Vet notification module
+        run: go vet ./...
+  notifications-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: modules/notifications
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: modules/notifications/go.mod
+      - name: Windows notification tests twice
+        shell: pwsh
+        run: |
+          go test -count=2 ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
